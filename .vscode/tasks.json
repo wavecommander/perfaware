@@ -1,0 +1,18 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "compile",
+            "command": "clang",
+            "args": [
+                "mySim86/main.c",
+                "-g",
+                "-L.",
+                "-lsim86_shared_debug",
+                "-o",
+                "build/mysim86"
+            ],
+            "type": "shell"
+        }
+    ],
+}
