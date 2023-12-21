@@ -1,70 +1,142 @@
-/* ========================================================================
-
-   (C) Copyright 2023 by Molly Rocket, Inc., All Rights Reserved.
-
-   This software is provided 'as-is', without any express or implied
-   warranty. In no event will the authors be held liable for any damages
-   arising from the use of this software.
-
-   Please see https://computerenhance.com for more information
-
-   ======================================================================== */
-
+#include <assert.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "../computer_enhance/perfaware/sim86/shared/sim86_shared.h"
 #pragma comment (lib, "sim86_shared_debug.lib")
 
-unsigned char ExampleDisassembly[247] =
-{
-    0x03, 0x18, 0x03, 0x5E, 0x00, 0x83, 0xC6, 0x02, 0x83, 0xC5, 0x02, 0x83, 0xC1, 0x08, 0x03, 0x5E,
-    0x00, 0x03, 0x4F, 0x02, 0x02, 0x7A, 0x04, 0x03, 0x7B, 0x06, 0x01, 0x18, 0x01, 0x5E, 0x00, 0x01,
-    0x5E, 0x00, 0x01, 0x4F, 0x02, 0x00, 0x7A, 0x04, 0x01, 0x7B, 0x06, 0x80, 0x07, 0x22, 0x83, 0x82,
-    0xE8, 0x03, 0x1D, 0x03, 0x46, 0x00, 0x02, 0x00, 0x01, 0xD8, 0x00, 0xE0, 0x05, 0xE8, 0x03, 0x04,
-    0xE2, 0x04, 0x09, 0x2B, 0x18, 0x2B, 0x5E, 0x00, 0x83, 0xEE, 0x02, 0x83, 0xED, 0x02, 0x83, 0xE9,
-    0x08, 0x2B, 0x5E, 0x00, 0x2B, 0x4F, 0x02, 0x2A, 0x7A, 0x04, 0x2B, 0x7B, 0x06, 0x29, 0x18, 0x29,
-    0x5E, 0x00, 0x29, 0x5E, 0x00, 0x29, 0x4F, 0x02, 0x28, 0x7A, 0x04, 0x29, 0x7B, 0x06, 0x80, 0x2F,
-    0x22, 0x83, 0x29, 0x1D, 0x2B, 0x46, 0x00, 0x2A, 0x00, 0x29, 0xD8, 0x28, 0xE0, 0x2D, 0xE8, 0x03,
-    0x2C, 0xE2, 0x2C, 0x09, 0x3B, 0x18, 0x3B, 0x5E, 0x00, 0x83, 0xFE, 0x02, 0x83, 0xFD, 0x02, 0x83,
-    0xF9, 0x08, 0x3B, 0x5E, 0x00, 0x3B, 0x4F, 0x02, 0x3A, 0x7A, 0x04, 0x3B, 0x7B, 0x06, 0x39, 0x18,
-    0x39, 0x5E, 0x00, 0x39, 0x5E, 0x00, 0x39, 0x4F, 0x02, 0x38, 0x7A, 0x04, 0x39, 0x7B, 0x06, 0x80,
-    0x3F, 0x22, 0x83, 0x3E, 0xE2, 0x12, 0x1D, 0x3B, 0x46, 0x00, 0x3A, 0x00, 0x39, 0xD8, 0x38, 0xE0,
-    0x3D, 0xE8, 0x03, 0x3C, 0xE2, 0x3C, 0x09, 0x75, 0x02, 0x75, 0xFC, 0x75, 0xFA, 0x75, 0xFC, 0x74,
-    0xFE, 0x7C, 0xFC, 0x7E, 0xFA, 0x72, 0xF8, 0x76, 0xF6, 0x7A, 0xF4, 0x70, 0xF2, 0x78, 0xF0, 0x75,
-    0xEE, 0x7D, 0xEC, 0x7F, 0xEA, 0x73, 0xE8, 0x77, 0xE6, 0x7B, 0xE4, 0x71, 0xE2, 0x79, 0xE0, 0xE2,
-    0xDE, 0xE1, 0xDC, 0xE0, 0xDA, 0xE3, 0xD8
-};
+// DEBUG MACROS
+// #define DEBUG 1
 
-int main(void)
+#ifdef DEBUG
+#define IF_DEBUG if (1)
+
+#else
+#define IF_DEBUG if (0)
+
+#endif // ifdef DEBUG
+// END DEBUG MACROS
+
+u16 proc_flags = 0;
+#define FLAG_BIT_ZERO 0x1
+#define FLAG_BIT_SIGN 0x2
+
+void execute_instruction(instruction inst);
+
+u32 proc_registers[8] = {0,0,0,0,0,0,0,0};
+
+int main(int argc, char **argv)
 {
-    u32 Version = Sim86_GetVersion();
-    printf("Sim86 Version: %u (expected %u)\n", Version, SIM86_VERSION);
-    if(Version != SIM86_VERSION)
-    {
-        printf("ERROR: Header file version doesn't match DLL.\n");
-        return -1;
+    { // Version checking, error out on mismatch
+        u32 Version = Sim86_GetVersion();
+        // printf("Sim86 Version: %u (expected %u)\n", Version, SIM86_VERSION);
+        if(Version != SIM86_VERSION)
+        {
+            printf("ERROR: Header file version doesn't match DLL.\n");
+            return -1;
+        }
     }
 
+    // Get the instruction table
     instruction_table Table;
     Sim86_Get8086InstructionTable(&Table);
-    printf("8086 Instruction Instruction Encoding Count: %u\n", Table.EncodingCount);
 
-    u32 Offset = 0;
-    while(Offset < sizeof(ExampleDisassembly))
-    {
-        instruction Decoded;
-        Sim86_Decode8086Instruction(sizeof(ExampleDisassembly) - Offset, ExampleDisassembly + Offset, &Decoded);
-        if(Decoded.Op)
-        {
-            Offset += Decoded.Size;
-            printf("Size:%u Op:%s Flags:0x%x\n", Decoded.Size, Sim86_MnemonicFromOperationType(Decoded.Op), Decoded.Flags);
+    // Get the 8086 binary file
+    FILE *bin_file = NULL;
+
+    // try to find file provided as an argument
+    if (argc > 1) {
+        if (isprint(argv[1][0]) && !isspace(argv[1][0])) {
+            bin_file = fopen(argv[1], "rb");
         }
-        else
-        {
+    }
+    // if no valid file provided, get binary from stdin
+    if (bin_file == NULL) {
+        bin_file = stdin;
+    }
+
+    // Load instructions into array from file
+    u8 instruction_bytes[1024 * 64];
+    u32 instruction_byte_count = 0;
+    char c = EOF;
+
+    if ((c = getc(bin_file)) != EOF) {
+        do {
+            instruction_bytes[instruction_byte_count++] = c;
+        } while ((c = getc(bin_file)) != EOF);
+    }
+
+    // Decode the instructions
+    u32 Offset = 0;
+    while (Offset < instruction_byte_count) {
+        instruction Decoded;
+        Sim86_Decode8086Instruction(instruction_byte_count - Offset, instruction_bytes + Offset, &Decoded);
+        if (Decoded.Op) {
+            Offset += Decoded.Size;
+            Sim86_PrintInstruction(Decoded, stdout);
+
+            IF_DEBUG {
+                printf("\t\tSize:%u Op:%s Flags:0x%x\n", Decoded.Size, Sim86_MnemonicFromOperationType(Decoded.Op), Decoded.Flags);
+            }
+
+            execute_instruction(Decoded);
+
+            printf("\n");
+        } else {
             printf("Unrecognized instruction\n");
             break;
         }
     }
 
-    return 0;
+    printf("\n=====================================\nREGISTERS AT END:\n");
+    register_access dummy_reg = {0, 0, 2};
+
+    for (int i = 1; i <= 8; ++i) {
+        dummy_reg.Index = i;
+        printf("\t%s: 0x%.4x (%d)\n", Sim86_RegisterNameFromOperand(&dummy_reg), proc_registers[i-1], proc_registers[i-1]);
+    }
+
+    // Close files
+    if (bin_file != stdin && bin_file != NULL) {
+        fclose(bin_file);
+    }
+}
+
+void exec_mov(instruction mov_inst) {
+    u16 data = mov_inst.Operands[1].Type == Operand_Immediate
+        ? mov_inst.Operands[1].Immediate.Value
+        : proc_registers[mov_inst.Operands[1].Register.Index - 1];
+
+    assert(mov_inst.Operands[0].Register.Index > 0 &&
+            mov_inst.Operands[0].Register.Index <= 8);
+
+    proc_registers[mov_inst.Operands[0].Register.Index - 1] = data;
+}
+
+void exec_sub(instruction sub_inst) {
+
+}
+
+void execute_instruction(instruction inst) {
+    if (inst.Operands[0].Type == Operand_Register) {
+        // print initial value of register
+        printf(" ; %s:0x%x->",
+            Sim86_RegisterNameFromOperand(&inst.Operands[0].Register),
+            proc_registers[inst.Operands[0].Register.Index - 1]);
+    }
+
+    switch (inst.Op) {
+        case Op_mov:
+            exec_mov(inst);
+            break;
+        case Op_sub:
+        case Op_cmp:
+        default:
+        break;
+    }
+
+    if (inst.Operands[0].Type == Operand_Register) {
+        // print resulting value of register
+            printf("0x%x", proc_registers[inst.Operands[0].Register.Index - 1]);
+    }
 }

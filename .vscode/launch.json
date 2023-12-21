@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/build/mysim86",
-            // "args": ["asm-test-inputs/listing_0041_add_sub_cmp_jnz"],
+            "args": ["computer_enhance/perfaware/part1/listing_0044_register_movs"],
             "cwd": "${workspaceFolder}",
         }
     ]
