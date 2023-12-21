@@ -88,6 +88,7 @@ int main(int argc, char **argv)
         }
     }
 
+    // TODO: omit registers that were not touched
     printf("\n=====================================\nREGISTERS AT END:\n");
     register_access dummy_reg = {0, 0, 2};
 
@@ -96,47 +97,90 @@ int main(int argc, char **argv)
         printf("\t%s: 0x%.4x (%d)\n", Sim86_RegisterNameFromOperand(&dummy_reg), proc_registers[i-1], proc_registers[i-1]);
     }
 
+    printf("\tflags: %s%s\n",
+        proc_flags & FLAG_BIT_SIGN ? "S" : "",
+        proc_flags & FLAG_BIT_ZERO ? "Z" : ""
+    );
+
     // Close files
     if (bin_file != stdin && bin_file != NULL) {
         fclose(bin_file);
     }
 }
 
-void exec_mov(instruction mov_inst) {
-    u16 data = mov_inst.Operands[1].Type == Operand_Immediate
-        ? mov_inst.Operands[1].Immediate.Value
-        : proc_registers[mov_inst.Operands[1].Register.Index - 1];
-
-    assert(mov_inst.Operands[0].Register.Index > 0 &&
-            mov_inst.Operands[0].Register.Index <= 8);
-
-    proc_registers[mov_inst.Operands[0].Register.Index - 1] = data;
+u32 *get_lhs_reg(instruction inst) {
+    return &proc_registers[inst.Operands[0].Register.Index - 1];
 }
 
-void exec_sub(instruction sub_inst) {
+u16 get_data(instruction inst) {
+    return inst.Operands[1].Type == Operand_Immediate
+        ? inst.Operands[1].Immediate.Value
+        : proc_registers[inst.Operands[1].Register.Index - 1];
+}
 
+void exec_mov(instruction inst) {
+    assert(inst.Operands[0].Register.Index > 0 &&
+            inst.Operands[0].Register.Index <= 8);
+
+    proc_registers[inst.Operands[0].Register.Index - 1] = get_data(inst);
+}
+
+void set_flags(u16 result) {
+    proc_flags = 0;
+
+    proc_flags |= (FLAG_BIT_ZERO && (result == 0));
+    proc_flags |= (FLAG_BIT_SIGN && (result & 0x8000));
+}
+
+void exec_arith(instruction inst) {
+    u32 *lhs_reg = get_lhs_reg(inst);
+    u16 data = get_data(inst);
+    u16 result = 0;
+
+    switch (inst.Op) {
+        case Op_add:
+            result = *lhs_reg + data;
+            *lhs_reg = result;
+        break;
+        case Op_sub:
+            result = *lhs_reg - data;
+            *lhs_reg = result;
+        break;
+        case Op_cmp:
+            result = *lhs_reg - data;
+        break;
+        default:
+            return;
+        break;
+    }
+
+    set_flags(result);
 }
 
 void execute_instruction(instruction inst) {
+    u32 *lhs_reg = get_lhs_reg(inst);
+
     if (inst.Operands[0].Type == Operand_Register) {
         // print initial value of register
         printf(" ; %s:0x%x->",
             Sim86_RegisterNameFromOperand(&inst.Operands[0].Register),
-            proc_registers[inst.Operands[0].Register.Index - 1]);
+            *lhs_reg);
     }
 
     switch (inst.Op) {
         case Op_mov:
             exec_mov(inst);
             break;
+        case Op_add:
         case Op_sub:
         case Op_cmp:
+            exec_arith(inst);
         default:
         break;
     }
 
     if (inst.Operands[0].Type == Operand_Register) {
         // print resulting value of register
-            printf("0x%x", proc_registers[inst.Operands[0].Register.Index - 1]);
+        printf("0x%x", *lhs_reg);
     }
 }
