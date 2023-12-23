@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/build/mysim86",
-            "args": ["computer_enhance/perfaware/part1/listing_0046_add_sub_cmp"],
+            "args": ["computer_enhance/perfaware/part1/listing_0051_memory_mov"],
             "cwd": "${workspaceFolder}",
         }
     ]
