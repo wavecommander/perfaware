@@ -49,11 +49,15 @@ int main(int argc, char **argv)
 
     // Get the 8086 binary file
     FILE *bin_file = NULL;
+    FILE *dump_file = NULL;
 
     // try to find file provided as an argument
     if (argc > 1) {
         if (isprint(argv[1][0]) && !isspace(argv[1][0])) {
-            bin_file = fopen(argv[1], "rb");
+                bin_file = fopen(argv[1], "rb");
+        }
+        if (argc > 3 && strcmp(argv[2], "-d") == 0) {
+            dump_file = fopen(argv[3], "wb");
         }
     }
     // if no valid file provided, get binary from stdin
@@ -61,24 +65,31 @@ int main(int argc, char **argv)
         bin_file = stdin;
     }
 
-    // Load instructions into array from file
-    u8 instruction_bytes[1024 * 64];
-    u32 instruction_byte_count = 0;
-    char c = EOF;
-
-    if ((c = getc(bin_file)) != EOF) {
-        do {
-            instruction_bytes[instruction_byte_count++] = c;
-        } while ((c = getc(bin_file)) != EOF);
-    }
-
     // zero 8086 simulated memory
     memset(&proc_memory, 0, 65536);
+
+    // Load instructions into proc memory from file
+    long instruction_byte_count = 0;
+    size_t result = 0;
+
+    // Obtain the file size
+    fseek(bin_file, 0, SEEK_END);
+    instruction_byte_count = ftell(bin_file);
+    rewind(bin_file);
+
+    result = fread(proc_memory, 1, instruction_byte_count, bin_file);
+    if (result != instruction_byte_count) {
+        return 3;
+    }
+    // Close file
+    if (bin_file != stdin && bin_file != NULL) {
+        fclose(bin_file);
+    }
 
     // Decode the instructions
     while (proc_inst_ptr < instruction_byte_count) {
         instruction Decoded;
-        Sim86_Decode8086Instruction(instruction_byte_count - proc_inst_ptr, instruction_bytes + proc_inst_ptr, &Decoded);
+        Sim86_Decode8086Instruction(instruction_byte_count - proc_inst_ptr, proc_memory + proc_inst_ptr, &Decoded);
         if (Decoded.Op) {
             proc_inst_ptr += Decoded.Size;
             Sim86_PrintInstruction(Decoded, stdout);
@@ -96,10 +107,9 @@ int main(int argc, char **argv)
         }
     }
 
+    // print values of 'regular' registers
     printf("\n=====================================\nREGISTERS AT END:\n");
     register_access dummy_reg = {0, 0, 2};
-
-    // print values of 'regular' registers
     for (int i = 1; i <= 8; ++i) {
         if (proc_registers[i] != 0) {
             dummy_reg.Index = i;
@@ -115,9 +125,9 @@ int main(int argc, char **argv)
     gen_flags_str(flags_out_str, proc_flags);
     printf("    flags: %s\n", flags_out_str);
 
-    // Close files
-    if (bin_file != stdin && bin_file != NULL) {
-        fclose(bin_file);
+    if (dump_file != NULL) {
+        fwrite(&proc_memory[64*4], sizeof(char), 16384, dump_file);
+        fclose(dump_file);
     }
 }
 
